@@ -42,13 +42,13 @@ class Sensor:
         # rotate meshes
         if local:
             self.mesh = self.mesh.rotate_vector(
-                self.coordinate_system[:, 1], pitch, self.position
+                self.coordinate_system[:, 1], pitch, point=self.position
             )
             self.mesh = self.mesh.rotate_vector(
-                self.coordinate_system[:, 2], yaw, self.position
+                self.coordinate_system[:, 2], yaw, point=self.position
             )
             self.mesh = self.mesh.rotate_vector(
-                self.coordinate_system[:, 0], roll, self.position
+                self.coordinate_system[:, 0], roll, point=self.position
             )
         else:
             self.mesh = self.mesh.rotate_y(pitch, self.position)
@@ -67,52 +67,93 @@ class Sensor:
             [self.position[0] + x, self.position[1] + y, self.position[2] + z]
         )
 
-    # private function, that checks whether a computed occlusion was correct. It does so by comparing the distance to
-    # the occluded point with the distance to the hit point with the vehicle surface
+
     def __check_occlusion(self, rays, intersection_points, occluded_points):
-        # get vectors to hit points and vectors to occluded points and compute length difference
-        coll_vectors = intersection_points - np.tile(
-            self.position, (np.size(intersection_points, 0), 1)
-        )
-        vectors = occluded_points - np.tile(
-            self.position, (np.size(occluded_points, 0), 1)
-        )
-        length_coll = np.sqrt((coll_vectors * coll_vectors).sum(axis=1))
-        length = np.sqrt((vectors * vectors).sum(axis=1))
-        length_diff = length_coll - length
+        # Ensure numpy arrays
+        intersection_points = np.asarray(intersection_points, dtype=float)
+        occluded_points = np.asarray(occluded_points, dtype=float)
+        rays = np.asarray(rays, dtype=int)
 
-        # find indices, where distance to hit point was bigger than distance to occluded point and delete these indices
-        # in rays
-        wrong_indices = np.where(length_diff > 0)[0]
-        rays = np.delete(rays, wrong_indices)
+        # If there are no intersections at all
+        if intersection_points.size == 0:
+            return np.array([], dtype=int)
 
-        return rays
+        # ---- Normalize shapes ----
+        # intersection_points: want shape (N, 3)
+        if intersection_points.ndim == 1:
+            # handle single point (3,) or flattened array (N*3,)
+            if intersection_points.size % 3 != 0:
+                # shape is inconsistent → treat as no valid hits
+                return np.array([], dtype=int)
+            intersection_points = intersection_points.reshape(-1, 3)
 
+        # occluded_points: want shape (N, 3)
+        if occluded_points.ndim == 1:
+            if occluded_points.size % 3 != 0:
+                return np.array([], dtype=int)
+            occluded_points = occluded_points.reshape(-1, 3)
+
+        # rays: want shape (N,)
+        if rays.ndim == 0:
+            rays = rays.reshape(1)
+
+        # Align lengths in case fallback returned mismatched sizes
+        n = min(len(intersection_points), len(occluded_points), len(rays))
+        if n == 0:
+            return np.array([], dtype=int)
+
+        intersection_points = intersection_points[:n]
+        occluded_points = occluded_points[:n]
+        rays = rays[:n]
+
+        # ---- Filter out NaN intersections ----
+        if intersection_points.ndim != 2 or intersection_points.shape[1] != 3:
+            # Something is still weird → bail out safely
+            return np.array([], dtype=int)
+
+        valid_mask = ~np.isnan(intersection_points).any(axis=1)
+        if not np.any(valid_mask):
+            return np.array([], dtype=int)
+
+        intersection_points = intersection_points[valid_mask]
+        occluded_points = occluded_points[valid_mask]
+        rays = rays[valid_mask]
+
+        # ---- Distance comparison ----
+        coll_vectors = intersection_points - np.tile(self.position, (len(intersection_points), 1))
+        vectors = occluded_points - np.tile(self.position, (len(occluded_points), 1))
+
+        length_coll = np.sqrt(np.sum(coll_vectors ** 2, axis=1))
+        length = np.sqrt(np.sum(vectors ** 2, axis=1))
+
+        valid = length_coll < length
+        return rays[valid]
+    
     # callable function to determine the points that are occluded by the vehicle
     def is_occluded_matrix(self, occlusion_mesh):
-        # get origins and directions for the ray trace
-        origins = np.tile(self.position, (np.size(self.covered_points, 0), 1))
+        origins = np.tile(self.position, (len(self.covered_points), 1))
         direction_vectors = self.covered_points - origins
 
-        # get the first points of intersection and index of the corresponding rays from the multi-ray-trace-function
         points, rays = occlusion_mesh.multi_ray_trace(
             origins, direction_vectors, first_point=True
         )[0:2]
-        if rays.size != 0:
-            # if any occlusions were found, verify them using the check_occlusion function
+
+        if rays.size > 0:
             occluded_points = self.covered_points[rays]
             rays = self.__check_occlusion(rays, points, occluded_points)
-        occluded_indices = np.take(self.covered_indices, rays, axis=0)
+        else:
+            rays = np.array([], dtype=int)
 
-        # set the values at the occluded indices in result to false
-        result = np.full(self.calculation_result.size, True)
-        np.put(result, occluded_indices, False)
+        occluded_indices = self.covered_indices[rays] if rays.size > 0 else np.array([], dtype=int)
 
-        # save results of the calculation
-        self.occluded_points = self.covered_points[rays]
+        result = np.full(len(self.calculation_result), True)
+        if occluded_indices.size > 0:
+            np.put(result, occluded_indices, False)
+
+        self.occluded_points = self.covered_points[rays] if rays.size > 0 else np.array([])
         self.calculation_result = self.calculation_result & result
         self.occluded_indices = occluded_indices
-        self.number_occluded_points = self.occluded_indices.size
+        self.number_occluded_points = len(occluded_indices)
 
     # function to set the sensor metrics, that is called after the calculation is done
     def set_metrics(self, grid, indexes=None, all_metrics=True):
@@ -175,9 +216,12 @@ class Sensor:
             self.metrics[index] = round((indices.size / area_indices.size) * 100, 1)
 
     # helper function that is used to bring the number of rows in the sensor calculation_result to the number of total
-    # points of the grid. this way, the area indices can be used correctly on the calculation result
+    # points of the grid. this way, the area indices can be used correctly on the calculation result    
     def __single_sensor_data(self, grid):
         data = np.zeros(grid.points.shape[0])
-        np.put(data, grid.car_points_indices, 2)
-        np.put(data, grid.outside_indices, self.calculation_result)
+        # Put 2 on car-area points – skip if no car points exist
+        if grid.car_points_indices is not None:
+            np.put(data, grid.car_points_indices, 2)
+        np.put(data, grid.outside_indices, self.calculation_result) # type: ignore[arg-type]
         return data
+    

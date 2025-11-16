@@ -12,8 +12,77 @@ from plotting.plot_helpers import metrics, setup_plot_args, output_folder
 from sensors.sensor_helpers import load_sensorset
 from utils.gui import GUI
 
+import numpy as np
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="numpy")
+np.seterr(divide='ignore', invalid='ignore') 
+np.seterr(over='ignore', invalid='ignore') 
+
+from embree_bypass import *   # applies the VTK fallback
+
 # PROGRAM OPTIONS
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+
+
+# === EMBREE BYPASS: VTK-ONLY MULTI RAY TRACE (ARM64 NATIVE) ===
+if not getattr(pv, "embree_available", False):
+    def _f(self, origins, direction_vectors, first_point=True):
+        import numpy as np
+
+        origins = np.asarray(origins, dtype=float)
+        direction_vectors = np.asarray(direction_vectors, dtype=float)
+
+        # Sanity check: require Nx3 arrays
+        if origins.ndim != 2 or origins.shape[1] != 3:
+            raise ValueError(f"origins must be (N,3), got {origins.shape}")
+        if direction_vectors.ndim != 2 or direction_vectors.shape[1] != 3:
+            raise ValueError(f"direction_vectors must be (N,3), got {direction_vectors.shape}")
+
+        # Normalize directions
+        norms = np.linalg.norm(direction_vectors, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        unit_dirs = direction_vectors / norms
+
+        # Ray length = mesh diagonal
+        far_points = origins + unit_dirs * self.length
+
+        # Preallocate outputs: one point + one index per ray
+        n_rays = origins.shape[0]
+        hit_points = np.empty((n_rays, 3), dtype=float)
+        hit_indices = np.empty((n_rays,), dtype=int)
+
+        for i, (origin, end) in enumerate(zip(origins, far_points)):
+            try:
+                point, ind = self.ray_trace(origin, end, first_point=first_point)
+
+                # Convert to arrays for consistent handling
+                point = np.asarray(point, dtype=float)
+                ind = np.asarray(ind, dtype=int)
+
+                # No hits → mark as NaN / -1
+                if point.size < 3 or ind.size < 1:
+                    hit_points[i, :] = np.nan
+                    hit_indices[i] = -1
+                    continue
+
+                # Reshape "point" to (M,3) and take the first hit
+                point = point.reshape(-1, 3)
+                first_point = point[0]
+                first_ind = int(ind.ravel()[0])
+
+                hit_points[i, :] = first_point
+                hit_indices[i] = first_ind
+            except Exception:
+                # If ray_trace itself blows up, treat as no hit
+                hit_points[i, :] = np.nan
+                hit_indices[i] = -1
+
+        # Return same structure as Embree multi_ray_trace: (points, ray_ids, cells)
+        return hit_points, hit_indices, []  # cells not used
+
+    pv.PolyData.multi_ray_trace = _f  # type: ignore
+    print("VTK fallback active (arm64 native)")
+# === END PATCH ===
 
 
 def run(args):
