@@ -1,0 +1,189 @@
+lidars:
+  - name: LIDAR_TOP
+    type: 32-beam 360 deg Lidar
+    position:
+      x: 0.0
+      y: 0.0
+      z: 1.7
+    orientation:
+      pitch: 0
+      yaw: 0
+      roll: 0
+    fov_h: 360
+    fov_v: 40  # Velodyne HDL-32E vertical FOV
+    detection_range: 100
+    min_range: 0.5
+
+cameras:
+  - name: CAM_FRONT
+    type: Camera
+    position:
+      x: 1.70
+      y: 0.00
+      z: 1.52
+    orientation:
+      pitch: 0
+      yaw: 180
+      roll: 0
+    fov: 70
+    max_dist: 100
+    min_dist: 0.1
+    n_pixels:
+      width: 1600
+      height: 900
+
+  - name: CAM_FRONT_RIGHT
+    type: Camera
+    position:
+      x: 1.48
+      y: 0.63
+      z: 1.52
+    orientation:
+      pitch: 0
+      yaw: -90
+      roll: 0
+    fov: 70
+    max_dist: 100
+    min_dist: 0.1
+    n_pixels:
+      width: 1600
+      height: 900
+
+  - name: CAM_FRONT_LEFT
+    type: Camera
+    position:
+      x: 1.48
+      y: -0.63
+      z: 1.52
+    orientation:
+      pitch: 0
+      yaw: 90
+      roll: 0
+    fov: 70
+    max_dist: 100
+    min_dist: 0.1
+    n_pixels:
+      width: 1600
+      height: 900
+
+  - name: CAM_BACK
+    type: Camera
+    position:
+      x: -1.53
+      y: 0.00
+      z: 1.52
+    orientation:
+      pitch: 0
+      yaw: 0
+      roll: 0
+    fov: 70
+    max_dist: 100
+    min_dist: 0.1
+    n_pixels:
+      width: 1600
+      height: 900
+
+  - name: CAM_BACK_RIGHT
+    type: Camera
+    position:
+      x: -1.31
+      y: 0.63
+      z: 1.52
+    orientation:
+      pitch: 0
+      yaw: 90
+      roll: 0
+    fov: 70
+    max_dist: 100
+    min_dist: 0.1
+    n_pixels:
+      width: 1600
+      height: 900
+
+  - name: CAM_BACK_LEFT
+    type: Camera
+    position:
+      x: -1.31
+      y: -0.63
+      z: 1.52
+    orientation:
+      pitch: 0
+      yaw: -90
+      roll: 0
+    fov: 70
+    max_dist: 100
+    min_dist: 0.1
+    n_pixels:
+      width: 1600
+      height: 900
+
+radars:
+  - name: RADAR_FRONT
+    position:
+      x: 2.43
+      y: 0.00
+      z: 0.52
+    orientation:
+      pitch: 0
+      yaw: 180
+      roll: 0
+    fov_h: 90
+    fov_v: 20
+    detection_range: 250
+    min_range: 0.5
+
+  - name: RADAR_FRONT_RIGHT
+    position:
+      x: 1.97
+      y: 0.91
+      z: 0.52
+    orientation:
+      pitch: 0
+      yaw: 180
+      roll: 0
+    fov_h: 90
+    fov_v: 20
+    detection_range: 250
+    min_range: 0.5
+
+  - name: RADAR_FRONT_LEFT
+    position:
+      x: 1.97
+      y: -0.91
+      z: 0.52
+    orientation:
+      pitch: 0
+      yaw: 180
+      roll: 0
+    fov_h: 90
+    fov_v: 20
+    detection_range: 250
+    min_range: 0.5
+
+  - name: RADAR_BACK_RIGHT
+    position:
+      x: -1.97
+      y: 0.91
+      z: 0.52
+    orientation:
+      pitch: 0
+      yaw: 0
+      roll: 0
+    fov_h: 90
+    fov_v: 20
+    detection_range: 250
+    min_range: 0.5
+
+  - name: RADAR_BACK_LEFT
+    position:
+      x: -1.97
+      y: -0.91
+      z: 0.52
+    orientation:
+      pitch: 0
+      yaw: 0
+      roll: 0
+    fov_h: 90
+    fov_v: 20
+    detection_range: 250
+    min_range: 0.5
